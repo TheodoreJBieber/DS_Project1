@@ -1,1 +1,3 @@
-# DS_Project1
+Theodore Bieber
+WPI - Distributed Systems
+Project 1
