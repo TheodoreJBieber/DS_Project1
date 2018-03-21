@@ -4,6 +4,8 @@
 #include <unistd.h>		/* for getopt() */
 #include <utime.h>		/* for utime() */
 #include <sys/types.h>
+#include <stdlib.h>
+#include <dirent.h>
 
 void usage(void);
 
@@ -14,6 +16,8 @@ void usage(void);
 	-r: copy directories recursively
 	file [file ...] - one or more files to be removed
 */
+
+char *dumpster_path = "~/dumpster/";
 
 int main(int argc, char *argv[]) {
 	char c;
@@ -36,11 +40,43 @@ int main(int argc, char *argv[]) {
   	/*
 		now check optind for file paths to be removed
   	*/
+  	int count;
+  	for(count = optind; count < argc; count++) {
+  		// remove or rmdir
+  	}
 }
+
+int remove_file(char *basename, char *dirname) {
+
+}
+
+int recursive_remove(char *basename, char *dirname) {
+	DIR *dp;
+  	struct dirent *d;
+
+  	dp = opendir(".");
+  	if (dp == NULL) {
+    	perror("open");
+    	exit(1);
+  	}
+
+  	d = readdir(dp);
+  	while (d) {
+    	
+
+
+    	d = readdir(dp);
+  	}
+
+  	closedir(dp);
+}
+
+
+
 
 /* print a usage message and quit */
 void usage(void) {
-    fprintf (stderr, "touch - set time of file\n");
+    fprintf (stderr, "rm - remove \n");
     fprintf (stderr, "usage: {-f<name>} [-a<time>] [-m<time>] [-h]\n");
     fprintf (stderr, "\t-f\tfile name to set time\n");
     fprintf (stderr, "\t-a\taccess time to set (seconds since midnight, 01/01/70)\n");
