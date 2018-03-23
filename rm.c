@@ -401,7 +401,7 @@ void copyToDump(char* file, char* dumpPath, struct stat fileStat) {
 void getDumpFilePath(char* file, char* dumpPath, char** newPath)
 {
     char* basec = strdup(file);
-    /
+    
     char* bname = basename(basec);
     *newPath = concat(dumpPath, "/");
     *newPath = concat(*newPath, bname);
