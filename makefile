@@ -15,4 +15,3 @@ dump: dump.c
 	
 clean:
 	rm rm dv dump
-	rm *.o

@@ -1,5 +1,7 @@
 # Theodore Bieber
 # Distributed Computing Systems
+# Project 1
+
 # create DUMPSTER path first on test machine.
 export DUMPSTER=/home/tjbieber/Desktop/dumpster
 totalRenameTime=0
@@ -80,7 +82,7 @@ for i in {1..10}
 		cp -rf /media/tjbieber/OS/testFolder "/media/tjbieber/OS/testFolder$i"
 	done
 # remove these directories and time.
-for i in {1..10}
+for i in {1..20}
 	do
 		sync
 		# get the start time.

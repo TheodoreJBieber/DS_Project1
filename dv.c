@@ -3,41 +3,50 @@
 // Project 1
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <stdlib.h>
 #include <ctype.h>
 #include <utime.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <libgen.h>
-#include <string.h>
 #include <errno.h>
 
+// this program is written in complement with rm.c
+// ./dv file [file...] - restores a file or files from the dumpster
+// the -h option will print usage information
+
+// function prototypes
 void usage(void);
 void getSrcFilePath(char* file, char* dumpPath, char** srcPath);
 void removeFolder(char* currPath, char* file, int isSamePtn);
 char* concat(char* s1, char* s2);
 void copyToTar(char* srcPath, char* tarPath, struct stat fileStat);
 
+// flags for the help option and error detection
+int hFlg = 0;
+int errFlg = 0;
+
 int main(int argc, char** argv)
 {
 	int c, i;
-	int hFlg = 0;
-	int errFlg = 0;
 	extern int optind, opterr;
 	opterr = 1;
+
+	// loop through and check for options
 	while((c = getopt(argc, argv, "h")) != -1) {
 		switch(c) {
 			case 'h': 
 				if(hFlg) {
-					errFlg ++;
+					errFlg++;
 					break;
 				}
-				hFlg ++;
+				hFlg++;
 				break; 
 			default: 
-				errFlg ++;
+				errFlg++;
 				break;
 		}
 	}
@@ -48,68 +57,66 @@ int main(int argc, char** argv)
 	if(hFlg) {
 		usage();
 	}
-	// Get file names.
+	// get file names
 	int fileCnt = argc - optind;
 	if(!fileCnt) {
 		printf("dv: missing file name\n");
-		exit(-1);
+		usage();
 	}
 	char* files[fileCnt];
-	for(i = 0; i < fileCnt; i ++) {
+	for(i = 0; i < fileCnt; i++) {
 		files[i] = argv[i + optind];
 	}
 
-	// Get DUMPSTER environment variable.
+	// get the dumpster path from environment variable
 	char* dumpPath = NULL;
 	dumpPath = getenv("DUMPSTER");
 	if(!dumpPath) {
 		printf("No match for DUMPSTER in environment\n");
 		exit(-1);
 	}
-	// Get stat for dumpster.
+	// get stat for dumpster
 	struct stat dumpStat;
 	int sRtn = stat(dumpPath, &dumpStat);
 	if(sRtn) {
 		perror("stat() call failed");
 		exit(sRtn);
 	}
-	// Get information for current directory.
+	// get information for current directory
 	char currDir[1024];
 	char* gRtn = getcwd(currDir, 1024);
 	if(!gRtn) {
 		perror("getcwd() call failed");
 		exit(-1);
 	}
-	// printf("Current working directory is %s\n", currDir);
-	// Get stat for current working directory.
+	// get stat for current working directory
 	struct stat currDirStat;
 	sRtn = stat(currDir, &currDirStat);
 	if(sRtn) {
 		perror("stat() call failed");
 		exit(sRtn);
 	}
-	// Move file from dumpster to current directory.
-	// Check for partition.
-	// printf("On same partition\n");
+	// move file from dumpster to current directory
+	// check for partition
 	for(i = 0; i < fileCnt; i++) {
 		char* file = files[i];
-		// Check for file existance.
+		// check for file existance
 		int aRtn = access(file, F_OK);
 		if(aRtn == 0) {
 			printf("File or folder %s already exists in current directory!\n", file);
 			exit(-1);
 		}
-		// Get the file in dumpster.
+		// get the file in dumpster
 		char* srcPath;
 		getSrcFilePath(file, dumpPath, &srcPath);
-		// Get the file name of the actual file.
+		// get the file name of the actual file
 		char* dupFile = strdup(file);
 		char* tarFile;
 		char* token;
 		while((token = strsep(&dupFile, "/"))) {
 			tarFile = strdup(token);
 		}
-		// Use access to check whether field exists.
+		// use access to check whether field exists
 		if(access(srcPath, F_OK) == -1) {
 			printf("File or folder %s does not exits\n", srcPath);
 			continue;
@@ -120,11 +127,11 @@ int main(int argc, char** argv)
 			perror("stat() call failed");
 			exit(sRtn);
 		}
-		// Check partition here!
-		// Check file or folder.
-		// If same partition.
+		// check partition here
+		// check file or folder
+		// if same partition
 		if(dumpStat.st_dev == currDirStat.st_dev) {
-			// If it ia s file.
+			// if it ia s file
 			if(S_ISREG(srcFileStat.st_mode)) {
 				int rRtn = rename(srcPath, tarFile);
                 if(rRtn) {
@@ -138,7 +145,7 @@ int main(int argc, char** argv)
                 }
 			}
 			else if(S_ISDIR(srcFileStat.st_mode)) {
-				// Recursively add new folder back to current directory.
+				// recursively add new folder back to current directory
 				removeFolder(srcPath, tarFile, 1);
 				int rRtn = rmdir(srcPath);
                 if(rRtn) {
@@ -169,7 +176,7 @@ int main(int argc, char** argv)
 	}
 
 }
-// fileStat: file stat from src file.
+// filestat is the file stat from the src file
 void copyToTar(char* srcPath, char* tarPath, struct stat fileStat) {
 	FILE* src;
 	FILE* tar;
@@ -208,27 +215,27 @@ void copyToTar(char* srcPath, char* tarPath, struct stat fileStat) {
 	return;
 }
 
-// currPath should be the file path in dumpster.
-// destPath should be current working directory.
-// file is the file name being transfered.
+// currPath should be the file path in dumpster
+// the destination is the current working directory
+// file is the file being transferred
 void removeFolder(char* currPath, char* file, int isSamePtn) {
 	DIR* dp;
 	struct dirent* d;
 	char* tarPath = file;
 	struct stat srcFolderStat;
     int sRtn = stat(currPath, &srcFolderStat);
-    // If dRtn is not 0, stat() failed
+    // if dRtn is not 0, stat() failed
     if(sRtn) {
         perror("stat() call failed");
         exit(sRtn);
     }
-    // Create a new folder in curretn working directory.
+    // create a new folder in curretn working directory
     int mRtn = mkdir(tarPath, srcFolderStat.st_mode);
     if(mRtn) {
         perror("mkdir() call failed");
         exit(mRtn);
     }
-    // Open the directory in dumpster.
+    // open the directory in dumpster
     dp = opendir(currPath);
     if(dp == NULL) {
         perror("open() call failed");
@@ -264,7 +271,7 @@ void removeFolder(char* currPath, char* file, int isSamePtn) {
                 }
     		}
     		else {
-    			// Copy file to newTarPath.
+    			// copy file to newTarPath
     			copyToTar(currFile, newTarPath, currStat);
     			int uRtn = unlink(currFile);
 				if(uRtn) {
@@ -294,22 +301,22 @@ void removeFolder(char* currPath, char* file, int isSamePtn) {
 
 }
 
-// Get the path for the file that is already in dumpster.
-// srcPath is the path for the file in dumpster.
+// get the path for the file that is already in dumpster
+// srcPath is the path for the file in dumpster
 void getSrcFilePath(char* file, char* dumpPath, char** srcPath) {
 	*srcPath = concat(dumpPath, "/");
 	*srcPath = concat(*srcPath, file);
 	return;
 }
 
-/*Print the usage of the command
-*/
+// print the usage of the command
 void usage(void) {
     fprintf(stderr, "dv - retrive file or directory from dumpster\n");
     fprintf(stderr, "usage: dv [-h] file [file ...]\n");
     fprintf(stderr, "\t-h\tdisplay basic usage message\n");
 }
 
+// combine two strings
 char* concat(char* s1, char* s2) {
     char* result = malloc(strlen(s1)+strlen(s2)+1);
     strcpy(result, s1);

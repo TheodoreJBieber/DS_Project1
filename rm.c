@@ -2,19 +2,26 @@
 // Distributed Computing Systems
 // Project 1
 
+// a program that operates similar to the native "rm" terminal command
+// it differs in that it will move the files to a dumpster instead of outright deleting them
+// the basic usage is ./rm filename [more_files....], where you can specify filepaths that you want to remove
+// you can throw in the -f command to completely subvert the dumpster and force remove things
+// and you can use the -r command to recursively remove a directory
+// the -h command will print the usage information and then quit out of the program
+
 #include <stdio.h>
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <utime.h>
-#include <unistd.h>
 #include <dirent.h>
 #include <libgen.h>
-#include <string.h>
-#include <errno.h>
 
-
+// function prototypes
 void usage(void);
 char* getExtention(char* path);
 void getDumpFilePath(char* file, char* dumpPath, char** newPath);
@@ -23,6 +30,7 @@ void copyToDump(char* file, char* dumpPath, struct stat fileStat);
 void removeFolder(char* currPath, char* currDumpPath, int isSamePtn);
 void removeFolderForce(char* folder);
 
+// these are flags indicating which options have been selected, as well as an error flag for error detection
 int fFlg = 0;
 int hFlg = 0;
 int rFlg = 0;
@@ -34,45 +42,40 @@ int main(int argc, char** argv) {
     extern int optind, opterr;
     opterr = 1;
     
+    // just loop through and check for options
     while((c = getopt(argc, argv, "fhr")) != -1) {
         switch(c) {
             case 'f':
-                if(fFlg)
-                {
-                    errFlg ++;
+                if(fFlg) {
+                    errFlg++;
                     break;
                 }
                 fFlg ++;
                 break;
             case 'h':
-                if(hFlg)
-                {
-                    errFlg ++;
+                if(hFlg) {
+                    errFlg++;
                     break;
                 }
-                hFlg ++;
+                hFlg++;
                 break;
             case 'r':
-                if(rFlg)
-                {
-                    errFlg ++;
+                if(rFlg) {
+                    errFlg++;
                     break;
                 }
-                rFlg ++;
+                rFlg++;
                 break;
             default:
-                errFlg ++;
+                errFlg++;
                 break;
         }
     }
-    if(errFlg) {
-        usage();
-    }
 
-    if(hFlg) {
+    if(hFlg || errFlg) {
         usage();
     }
-    // Get file names.
+    // get file names
     int fileCnt = argc - optind;
     if(!fileCnt) {
         printf("rm: missing file name\n");
@@ -83,40 +86,37 @@ int main(int argc, char** argv) {
         files[i] = argv[i + optind];
     }
 
-    // Get DUMPSTER environment variable.
+    // get dumpster path from environment variable
     char* dumpPath = NULL;
     dumpPath = getenv("DUMPSTER");
     if(!dumpPath) {
         printf("Missing variable 'DUMPSTER' in environment\n");
         exit(-1);
     }
-    // printf("%s\n", dumpPath);
-    // Get stat for dumpster.
+    // get stat for dumpster
     struct stat dumpStat;
     int dRtn = stat(dumpPath, &dumpStat);
-    // If dRtn is not 0, stat() failed
+    // if dRtn not 0, stat() failed
     if(dRtn) {
         perror("stat() call failed");
         exit(dRtn);
     }
-    // Move file to DUMPSTER
-    for(i = 0; i < fileCnt; i ++) {
+    // move file to DUMPSTER
+    for(i = 0; i < fileCnt; i++) {
         char* file = files[i];
-        // printf("Current processing file is: %s\n", file);
-        // Check whether the file exists or not.
-        // File not exist, report error and continue to next file.
+        // check if the file exists or not
+        // File doesn't exist, report error and continue to next file
         if(access(file, F_OK) == -1) {
             printf("File or folder %s does not exist\n", file);
             continue;
         }
-        // Get stat for current file.
+        // get stat for current file
         struct stat fileStat;
         int fRtn = stat(file, &fileStat);
         if(fRtn) {
             perror("stat() call failed");
             exit(fRtn);
         }
-        // TODO: Is -r need to be checked when -f is specified ? 
         if(fFlg) {
             if(S_ISREG(fileStat.st_mode)) {
                 int rRtn = remove(file);
@@ -135,15 +135,14 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        // Check for partition.
-        // Same partition.
+        // check for partition
+        // same partition
         if(fileStat.st_dev == dumpStat.st_dev) {
-            // printf("On same partition!\n");
-            // Check for file or folder.
-            // If it is a file, move it to the dumpster folder.
+            // check if file or folder
+            // if it is a file, move it to the dumpster folder
             if(S_ISREG(fileStat.st_mode)) {
                 char* newPath;
-                // Get the file path in dumpster.
+                // get the file path in dumpster
                 getDumpFilePath(file, dumpPath, &newPath);
                 int rRtn = rename(file, newPath);
                 if(rRtn) {
@@ -157,28 +156,23 @@ int main(int argc, char** argv) {
                 }
 
             } else if(S_ISDIR(fileStat.st_mode)) {
-                // Check for -r flag.
-                // If -r is not presented on the folder. 
                 if(!rFlg) {
                     printf("-r option missing for folder %s. ", file);
                     printf("Precede to the next file.\n");
                     continue;
                 }
-                // Remove the other files and folders in this folder.
+                // remove the other files and folders in this folder
                 removeFolder(file, dumpPath, 1);
-                // Remove this folder.
                 int rRtn = rmdir(file);
-                if(rRtn)
-                {
+                if(rRtn) {
                     perror("rmdir() call failed");
                     exit(rRtn);
                 }
             }
         } else {
-            // Check for file or folder.
+            // check if file or folder
             if(S_ISREG(fileStat.st_mode)) {
-                // printf("On different partition!\n");
-                // Copy file and set metadata.
+                // copy file and set metadata
                 copyToDump(file, dumpPath, fileStat);
                 int uRtn = unlink(file);
                 if(uRtn) {
@@ -200,9 +194,9 @@ int main(int argc, char** argv) {
             }
         }
     }
-    return 0;
 }
 
+// force remove a folder
 void removeFolderForce(char* folder) {
     DIR* dp;
     struct dirent* d;
@@ -214,15 +208,13 @@ void removeFolderForce(char* folder) {
     d = readdir(dp);
     while(d) {
         if((strcmp(d->d_name, "..") == 0) || (strcmp(d->d_name, ".") == 0)) {
-            // printf("Handling .. and . folder\n");
             d = readdir(dp);
             continue;
         }
         struct stat fileStat;
-        // Get the current file.
+        // get the current file
         char* currFile = concat(folder, "/");
         currFile = concat(currFile, d->d_name);
-        // printf("Current processing file is: %s\n", currFile);
         int sRtn = stat(currFile, &fileStat);
         if(sRtn) {
             perror("stat() call failed");
@@ -248,30 +240,24 @@ void removeFolderForce(char* folder) {
     closedir(dp);
 }
 
-// Write a function to recursively remove a folder.
-// current path, dumpster path, flag to check wheter is the same partition.
-// currPath and currDumpPath is changed every time removeFolder is called recursively.
+// recursively remove a folder
 void removeFolder(char* currPath, char* currDumpPath, int isSamePtn) {
     DIR* dp;
     struct dirent* d;
-    // printf("Directory is %s\n", currPath);
-    // printf("Current dumpster path is %s\n", currDumpPath);
-    // Update current dumpster path.
+    // update current dumpster path
     char* newDumpPath;
     getDumpFilePath(currPath, currDumpPath, &newDumpPath);
 
-    // printf("new dumpster path is %s\n", newDumpPath);
-
-    // Get the mode for old folder.
+    // get the mode for old folder
     struct stat srcFolderStat;
     int sRtn = stat(currPath, &srcFolderStat);
-    // If dRtn is not 0, stat() failed
+    // if dRtn is not 0, stat() failed
     if(sRtn) {
         perror("stat() call failed");
         exit(sRtn);
     }
 
-    // Create a new folder in dumpster and update currDumpPath.
+    // create a new folder in dumpster and update currDumpPath
     int mRtn = mkdir(newDumpPath, srcFolderStat.st_mode);
     if(mRtn) {
         perror("mkdir() call failed");
@@ -289,9 +275,9 @@ void removeFolder(char* currPath, char* currDumpPath, int isSamePtn) {
             d = readdir(dp);
             continue;
         }
-        // Check wheter it is a folder or a file.
+        // check wheter it is a folder or a file
         struct stat currStat;
-        // Get the current file.
+        // get the current file
         char* currFile = concat(currPath, "/");
         currFile = concat(currFile, d->d_name);
         int sRtn = stat(currFile, &currStat);
@@ -299,7 +285,7 @@ void removeFolder(char* currPath, char* currDumpPath, int isSamePtn) {
             perror("stat() call failed");
             exit(sRtn);
         }
-        // If it is a file, remove file.
+        // if it is a file, remove file
         if(S_ISREG(currStat.st_mode)) {
             if(isSamePtn) {
                 char* newPath;
@@ -324,11 +310,10 @@ void removeFolder(char* currPath, char* currDumpPath, int isSamePtn) {
                 }
             }
         } else if(S_ISDIR(currStat.st_mode)) {
-            // If it is a directory.
+            // if it is a directory
             removeFolder(currFile, newDumpPath, isSamePtn);
             int rRtn = rmdir(currFile);
-            if(rRtn)
-            {
+            if(rRtn) {
                 perror("unlink() call failed");
                 exit(rRtn);
             }
@@ -338,7 +323,7 @@ void removeFolder(char* currPath, char* currDumpPath, int isSamePtn) {
     }
     // unlink dir
     closedir(dp);
-    // Set the time and mode for the new folder here.
+    // set the time and mode for the new folder here
     int cRtn = chmod(newDumpPath, srcFolderStat.st_mode);
     if(cRtn) {
         perror("chmod() call failed");
@@ -347,15 +332,14 @@ void removeFolder(char* currPath, char* currDumpPath, int isSamePtn) {
     free(newDumpPath);
 }
 
-// Reference: http://stackoverflow.com/questions/8465006/how-to-concatenate-2-strings-in-c
 char* concat(char* s1, char* s2) {
-    char* result = malloc(strlen(s1)+strlen(s2)+1);//+1 for the zero-terminator
-    //in real code you would check for errors in malloc here
+    char* result = malloc(strlen(s1)+strlen(s2)+1);
     strcpy(result, s1);
     strcat(result, s2);
     return result;
 }
-// Copying file from another partition to dumpster.
+
+// when the file is on another partition, copy to dumpster
 void copyToDump(char* file, char* dumpPath, struct stat fileStat) {
     char* newPath;
     getDumpFilePath(file, dumpPath, &newPath);
@@ -387,7 +371,9 @@ void copyToDump(char* file, char* dumpPath, struct stat fileStat) {
         perror("chmod() call failed");
         exit(cRtn);
     }
-    const struct utimbuf srcTim = {fileStat.st_atime, fileStat.st_mtime};
+    const struct utimbuf srcTim = {
+        fileStat.st_atime, fileStat.st_mtime
+    };
     int uRtn = utime(newPath, &srcTim);
     if(uRtn) {
         perror("utime() call failed");
@@ -397,9 +383,8 @@ void copyToDump(char* file, char* dumpPath, struct stat fileStat) {
     return;
 }
 
-// Get the path for the file that will be generated in dumpster.
-void getDumpFilePath(char* file, char* dumpPath, char** newPath)
-{
+// get the path for the file that will be generated in dumpster
+void getDumpFilePath(char* file, char* dumpPath, char** newPath) {
     char* basec = strdup(file);
     
     char* bname = basename(basec);
@@ -408,13 +393,14 @@ void getDumpFilePath(char* file, char* dumpPath, char** newPath)
     char* ext = getExtention(*newPath);
 
     // if extension != ".0"
-    if(strcmp(ext, ".0"))
-    {
+    if(strcmp(ext, ".0")) {
         *newPath = concat(*newPath, ext);
     }
 }
 
-// Get extention if duplicate. return .0 if no duplicate. Report error if full.
+// get extention if duplicate
+// return .0 if no duplicate
+// Report an error if full
 char* getExtention(char* path) {
     char* tempPath = path;
     int isDup = 0;
@@ -429,7 +415,7 @@ char* getExtention(char* path) {
             printf("Dumpster is full!");
             exit(-1);
         }
-        num ++;
+        num++;
     }
     if(!isDup) {
         numArr[0] = 48;
@@ -440,10 +426,8 @@ char* getExtention(char* path) {
     return concat(".", numArr);
 }
 
-/*  Print the usage of the command
-*/
-void usage(void)
-{
+// print the basic usage information
+void usage(void) {
     fprintf(stderr, "rm - remove file and directory to dumpster\n");
     fprintf(stderr, "usage: rm [-f -h -r] file [file ...]\n");
     fprintf(stderr, "\t-f\tforce a complete remove, files not moved to dumpster\n");

@@ -11,3 +11,6 @@ dv, which is used with the command "./dv [-h] file [file...]"
 dump, which is used with the command "./dump [-h]"
 
 runTests.sh is a bash script that runs tests if used on my machine
+
+Setup:
+set up an environment variable named DUMPSTER with a folder path. This is now the location the dumpster puts files
